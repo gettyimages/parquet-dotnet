@@ -1,7 +1,7 @@
 name: 'Full Workflow'
 
 env:
-  VERSION: 4.7.1
+  VERSION: 4.8.0
   ASM_VERSION: 4.0.0
 
 on:
@@ -40,6 +40,7 @@ jobs:
     runs-on: 'ubuntu-latest'
 
     steps:
+    - run: echo ${{ github.head_ref }}
     - uses: actions/checkout@v3
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
@@ -52,7 +53,7 @@ jobs:
       run: |
         envsubst < src/Parquet/Globals.cs > g.tmp && mv g.tmp src/Parquet/Globals.cs
         cat src/Parquet/Globals.cs
-        dotnet build src/Parquet.sln -c release /p:Version=$VERSION /p:FileVersion=$VERSION /p:AssemblyVersion=$ASM_VERSION
+        dotnet build src/Parquet.sln -c release /p:Version=$VERSION-alpha-00 /p:FileVersion=$VERSION /p:AssemblyVersion=$ASM_VERSION
 
     - uses: actions/upload-artifact@v3
       name: save
@@ -80,3 +81,16 @@ jobs:
           name: ${{ env.VERSION }}
           files: "src/Parquet/bin/Release/*.nupkg"
           generate_release_notes: true
+
+  publish-alpha:
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.head_ref == 'dataframe2'
+    environment: nuget
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: nuget
+          path: nuget/
+      - name: Do It!
+        run: dotnet nuget push nuget/* --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
