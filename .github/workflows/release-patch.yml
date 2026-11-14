@@ -1,0 +1,152 @@
+name: Release next patch version
+
+# Run by hand from the Actions tab on main. Takes the highest stable release tag (X.Y.Z, no
+# prerelease suffix), bumps Z, tests and builds at that version, then pushes an annotated tag and a
+# GitHub release with the NuGet packages attached. Nothing is published to nuget.org.
+#
+# A push to the branch listed under `push` is a dry run: it computes the version, tests, builds and
+# uploads the packages as a run artifact, and skips the tag and release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Release notes (Markdown) for the GitHub release"
+        required: false
+        default: ""
+  push:
+    branches:
+      - patch-release-workflow
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Compute next patch version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      previous: ${{ steps.next.outputs.previous }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Next patch version
+        id: next
+        run: |
+          set -euo pipefail
+          previous=$(git tag -l '[0-9]*.[0-9]*.[0-9]*' | grep -Ev -- '-' | sort -V | tail -n 1)
+          if [ -z "$previous" ]; then
+            echo "::error::No stable X.Y.Z release tag found" && exit 1
+          fi
+          IFS=. read -r major minor patch <<< "$previous"
+          version="$major.$minor.$((patch + 1))"
+          if git rev-parse -q --verify "refs/tags/$version" > /dev/null; then
+            echo "::error::Tag $version already exists" && exit 1
+          fi
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Next patch version: $previous -> $version"
+
+  test:
+    name: Unit tests
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # The parquet-mr integration tests run tools/parquet-tools-*.jar, whose Hadoop code calls
+      # Subject.getSubject; newer JDKs throw UnsupportedOperationException there.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Python dependencies
+        run: pip install pyarrow pandas
+
+      - name: Test
+        run: dotnet test src/Parquet.slnx -c Release
+
+  build:
+    name: Build and pack ${{ needs.version.outputs.version }}
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Stamp version and commit
+        run: |
+          envsubst '${VERSION} ${GITHUB_SHA}' < src/Parquet/Globals.cs > globals.tmp
+          mv globals.tmp src/Parquet/Globals.cs
+          cat src/Parquet/Globals.cs
+
+      - name: Build and pack
+        run: |
+          major=$(echo "$VERSION" | cut -d. -f1)
+          dotnet build src/Parquet.slnx -c Release \
+            -p:Version=$VERSION -p:FileVersion=$VERSION.0 -p:AssemblyVersion=$major.0.0.0 \
+            -p:ContinuousIntegrationBuild=true
+          mkdir artifacts
+          cp src/Parquet/bin/Release/*.nupkg src/Parquet/bin/Release/*.snupkg artifacts/
+          cp src/Parquet.Data.Analysis/bin/Release/*.nupkg artifacts/
+          ls -l artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ needs.version.outputs.version }}
+          path: artifacts/*
+
+  release:
+    name: Tag and release ${{ needs.version.outputs.version }}
+    needs: [version, build]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PREVIOUS: ${{ needs.version.outputs.previous }}
+      NOTES: ${{ inputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages-${{ needs.version.outputs.version }}
+          path: artifacts
+
+      - name: Tag and create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" "$GITHUB_SHA" -m "Parquet.Net $VERSION" -m "Patch release after $PREVIOUS, built by ${{ github.workflow }} run ${{ github.run_id }}"
+          git push origin "refs/tags/$VERSION"
+          body="${NOTES:-Patch release after $PREVIOUS.}"
+          gh release create "$VERSION" artifacts/* --verify-tag --title "$VERSION" --notes "$body"

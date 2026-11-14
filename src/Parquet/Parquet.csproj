@@ -22,11 +22,11 @@
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <Authors>Ivan Gavryliuk (@aloneguid)</Authors>
+        <Authors>Getty Images</Authors>
         <Product />
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <PackageProjectUrl>https://github.com/aloneguid/parquet-dotnet</PackageProjectUrl>
-        <RepositoryUrl>https://github.com/aloneguid/parquet-dotnet</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/gettyimages/parquet-dotnet</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/gettyimages/parquet-dotnet</RepositoryUrl>
         <RepositoryType>GitHub</RepositoryType>
         <PackageIcon>icon.png</PackageIcon>
         <Description>Fully managed Apache Parquet implementation.</Description>
