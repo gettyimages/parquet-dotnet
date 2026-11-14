@@ -1,20 +1,3 @@
-# 6.1.1-pre.2
-
-## New features
-- `ParquetRequired` attribute (covering #613 and more):
-  - Accepts a boolean flag, letting you be more explicit.
-  - Can be applied to .NET fields, not just properties.
-  - Works for structs, maps, and lists, not just to data fields.
-- `ParquetRowGroupWriter` has open public member `ThriftRowGroup` that can be used to access the underlying low-level Thrift object. Use with caution. #614.
-
-## Improvements
-- Fixed `ClrNullableIfHasNulls` property comments and added basic test coverage (#786).
-- Upgraded to the [latest Thrift specification](https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift) – affects only this library's developers and maintainers, or users of the low-level metadata.
-
-## Breaking changes
-- The compression level changed from `SmallestSize` to `Optimal` for the default level like it was in v5. Thanks to @svenclaesson
-for pointing this out in #765.
-
 # 6.1.0
 
 ## New
