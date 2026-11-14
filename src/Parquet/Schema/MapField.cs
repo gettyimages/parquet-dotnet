@@ -30,7 +30,7 @@ public sealed class MapField : Field {
     /// <summary>
     /// Declares a map field
     /// </summary>
-    public MapField(string name, Field keyField, Field valueField, bool isNullable = true)
+    public MapField(string name, Field keyField, Field valueField)
         : base(name, SchemaType.Map) {
 
         if(keyField is DataField { IsNullable: true }) {
@@ -44,7 +44,7 @@ public sealed class MapField : Field {
         Path = new FieldPath(name, ContainerName);
         Key.PathPrefix = Path;
         Value.PathPrefix = Path;
-        IsNullable = isNullable;
+        IsNullable = true;
     }
 
     internal MapField(string name)
